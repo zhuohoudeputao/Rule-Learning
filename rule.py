@@ -32,6 +32,8 @@ class AtomicFormula(Literal):
 class AtomicProp(Literal):
     # The class of atomic proposition
     # one atomic proposition means attr = value
+    # 这里也是简化的表示，对于西瓜数据集来说
+    # 原子命题的表示就只有“属性=属性值”，例如“根蒂=蜷缩”
     attr = ""
     value = ""
 
@@ -56,6 +58,9 @@ class AtomicProp(Literal):
 class Head:
     # The class of head
     # one head means the result of a rule
+    # 实际上Head的作用就是指示了规则所要判断的结果
+    # 对于西瓜数据集来说，就是“好瓜”或“不是好瓜”，只有两种状态
+    # 但对多分类问题来说，这个state就不能只是True和False了
     head = ""
     state = True
 
@@ -81,6 +86,7 @@ class Rule:
     # one rule contains
     # 1. the result, which is an object of Head
     # 2. a literal sequence with "and" relation between them
+    # 这里为了简单，规则中文字之间只有合取
     def __init__(self, head, literalSequence=[]):
         self.head = head
         self.rule = literalSequence
