@@ -237,6 +237,19 @@ class Data:
         else:
             return self.data[dataIndex][featureIndex] == literal.value
 
+    # 测试函数，这里暂时用到准确率，以后有需要还可以继续加
+    def test(self, rule, skip=[]):
+        covered = self.getCoveredSample(rule, skip)
+        TP, FP, FN, TN = 0, 0, 0, 0
+        for i in covered:
+            if self.getLabel(i) == True:
+                TP += 1
+            else:
+                FP += 1
+        precision = TP / (TP + FP)
+        # recall = TP/data.getPositiveSampleNum()
+        return precision
+
 
 def SerialCover():
     # 一开始用整个数据集怎么都做不出结果
@@ -351,6 +364,9 @@ def TopDown(data, coverSet, b, rule):
             featureList.extend(featureDict[i])
     # 对featureList里面的每一个文字都加到规则中，然后记录结果
     for i in range(len(featureList)):
+        ruletmp = rule.addLiteral(featureList[i])
+        # 测试
+
         pass
 
 
