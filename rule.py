@@ -30,7 +30,6 @@ class AtomicFormula(Literal):
 
 
 class AtomicProp(Literal):
-    # The class of atomic proposition
     # one atomic proposition means attr = value
     # 这里也是简化的表示，对于西瓜数据集来说
     # 原子命题的表示就只有“属性=属性值”，例如“根蒂=蜷缩”
@@ -43,7 +42,7 @@ class AtomicProp(Literal):
         self.value = value
 
     def __str__(self):
-        return "%s = %s" % (self.attr, self.value)
+        return "%s=%s" % (self.attr, self.value)
 
     def __eq__(self, other):
         return self.attr == other.attr and self.value == other.value
@@ -119,12 +118,33 @@ class Rule:
     def __getitem__(self, item):
         return self.rule[item]
 
+
+class RuleSet:
+
+    def __init__(self, rules=[]):
+        self.rules = rules
+
+    def addRule(self, rule):
+        self.rules.append(rule)
+
+    def extendRule(self, rules):
+        self.rules.extend(rules)
+
+    def __len__(self):
+        return len(self.rules)
+
+    def __getitem__(self, item):
+        return self.rules[item]
+
+    def print(self):
+        for i in range(len(self.rules)):
+            print(self.rules[i])
+
 # 15.2
 
 
 class Data:
     # 管理数据的一个类，为数据提供了一些便利的访问
-
     def __init__(self, feature, data, label):
         self.feature = feature
         self.data = data
@@ -144,10 +164,10 @@ class Data:
 
     # 一开始这里面没有加self导致出错的结果，原来是因为全局变量的原因
     def getLabel(self, dataIndex):
-        if self.label[dataIndex] == '是':
-            return True
+        if isinstance(dataIndex, list):
+            return [self.label[index] == '是' for index in dataIndex]
         else:
-            return False
+            return self.label[dataIndex] == '是'
 
     def getPositiveSampleNum(self):
         ps = 0
@@ -156,13 +176,42 @@ class Data:
                 ps += 1
         return ps
 
-    def getRuleCover(self, rule, skip=[]):
+    # 不重复地生成文字
+    def getFeatureDict(self, skip=[]):
+        dataIndex = 0
+        featureIndex = 0
+        sampleNum = self.getSampleNum()
+        atomicPropContainer = [[] for i in range(len(self.feature))]
+        for dataIndex in range(self.getSampleNum()):
+            if dataIndex in skip:
+                continue
+            for featureIndex in range(self.getFeatureNum()):
+                literalNow = self.getLiteral(dataIndex, featureIndex)
+                if literalNow not in atomicPropContainer[featureIndex]:
+                    atomicPropContainer[featureIndex].append(literalNow)
+        return atomicPropContainer
+
+    # 返回规则包不包括该特征的一个状态，例如[False, True, False,...]
+    def getCoveredFeature(self, rule):
+        coveredFeature = [False] * len(self.getFeatureNum())
+        ruleAttr = []
+        for i in range(len(rule)):
+            ruleAttr.append(rule[i].attr)
+        for i in range(self.getFeatureNum()):
+            if self.feature[i] in ruleAttr:
+                coveredFeature[i] = True
+        return coveredFeature
+
+    # skip可以用来传入已经去除掉的样例序号，相当于在数据集中去掉该样例
+    def getCoveredSample(self, rule, skip=[]):
         # get the indexes of data covered by rule
         indexSet = []
+        # 对每个样例都排查一遍
         for i in range(len(self.data)):
             if i in skip:
                 continue
             covered = True
+            # 逐个检查样例中的“属性、属性值”是不是被规则中的“属性=属性值”覆盖
             for j in range(0, len(rule)):
                 literal = rule[j]
                 covered = self.getLiteralCover(rule[j], i)
@@ -188,29 +237,6 @@ class Data:
         else:
             return self.data[dataIndex][featureIndex] == literal.value
 
-    # 这个是为了给序贯覆盖写的迭代器，用于对每个特征都生成所有的属性
-    # 不重复地生成文字
-    # 按照先增加样例的序号，再增加特征的序号进行
-    def __iter__(self):
-        self.iter_dataIndex = 0
-        self.iter_featureIndex = 0
-        self.literalContainer = []
-        return self
-
-    def __next__(self):
-        while self.iter_dataIndex < self.getSampleNum() and self.iter_featureIndex < self.getFeatureNum():
-            literalNow = self.getLiteral(
-                self.iter_dataIndex, self.iter_featureIndex)
-            literalFeatureIndex = self.iter_featureIndex
-            self.iter_dataIndex += 1
-            if self.iter_dataIndex == self.getSampleNum():
-                self.iter_dataIndex = 0
-                self.iter_featureIndex += 1
-            if literalNow not in self.literalContainer:
-                self.literalContainer.append(literalNow)
-                return literalNow, literalFeatureIndex
-        raise StopIteration
-
 
 def SerialCover():
     # 一开始用整个数据集怎么都做不出结果
@@ -221,19 +247,12 @@ def SerialCover():
         train_watermelon.append(WATERMELON[i])
         train_label.append(LABEL[i])
     data = Data(FEATURE, train_watermelon, train_label)
-
     # 首先第一步是生成文字表（突然想到可以直接写在Data类里）
-    featureDict, currentFeatureIndex = [[]], 0  # 已二维的形式记录目前所有生成的文字
-    dataIter = iter(data)  # 生成不重复的文字的迭代器
-    # 觉得与其每到用完的时候再生成，不如直接全部生成更划算一点
-    for literalNow, featureIndex in dataIter:
-        if currentFeatureIndex != featureIndex:
-            featureDict.append([])
-            currentFeatureIndex += 1
-        featureDict[currentFeatureIndex].append(literalNow)
+    # 已二维的形式记录目前所有生成的文字
+    featureDict = data.getFeatureDict()
 
     # 然后是进行序贯覆盖
-    R = []  # 规则集
+    R = RuleSet()  # 规则集
     coverSet = []  # 记录已经被规则集覆盖的样本
     currentL = 0  # 当前规则的长度
     completed = False
@@ -258,7 +277,7 @@ def SerialCover():
                 # 测试规则
                 allPositive = True
                 # 这样子实现对于二分类问题，当我们需要判断反例的时候只需要把True改为False
-                coverSet_tmp = data.getRuleCover(rule, coverSet)
+                coverSet_tmp = data.getCoveredSample(rule, coverSet)
                 result = list(
                     map(lambda dataIndex: data.getLabel(dataIndex), coverSet_tmp))
                 allPositive = result.count(True) == len(result)
@@ -266,7 +285,7 @@ def SerialCover():
                 #     allPositive = allPositive and data.getLabel(dataIndex)
                 # 对规则集进行更新
                 if allPositive == True and coverSet_tmp != []:
-                    R.append(rule)
+                    R.addRule(rule)
                     print(rule)
                     coverSet.extend(coverSet_tmp)
                     print("coverSet", coverSet)
@@ -303,12 +322,38 @@ def SerialCover():
                     # 这时对当前能更新的位置进行更新
                     a = [i for i in range(
                         combine[pos-1]+1, combine[pos-1]+1+len(combine)-pos+1)]
-                    combine[pos-1:] = a
+                    combine[pos - 1:] = a
+    return R
 
 
-def TopDown():
+def BeamSearch(b):
+    # b是每轮保留的数量，当然不能太大
+    coverSet = []
+    R = RuleSet()
+    rule = Rule(Head("好瓜"))
+    # 数据直接就是整个西瓜数据集2.0
+    data = Data(FEATURE, WATERMELON, LABEL)
+    return TopDown(data, coverSet, b, rule)
 
-    pass
+
+def TopDown(data, coverSet, b, rule):
+    # 可以写成递归的形式，当coverSet覆盖了所有正例的时候终止，然后返回规则集
+    # 每次传到下一层的时候是把当前留下来的规则传到下面去
+    # 同样的，对于自顶向下的问题，因为是一轮一轮进行扫描，而每轮只添加一个新的
+    # 首先是获取二维文字集，那么这个时候在每一层当中要考虑把已经覆盖的那些正例去除掉，再生成FD
+    featureDict = data.getFeatureDict(coverSet)
+    gradeTable = []  # 得分表，用来存放拓展出来的规则还有相应的得分
+    # 对于传进来的规则，我们要先看它覆盖了多少个特征，然后把这些特征的属性值去掉
+    coveredFeature = data.getCoveredFeature(rule)
+    featureList = []  # 同时变成一个列表
+    for i in range(len(featureDict)):
+        if coveredFeature[i] == False:
+            featureList.extend(featureDict[i])
+    # 对featureList里面的每一个文字都加到规则中，然后记录结果
+    for i in range(len(featureList)):
+        pass
 
 
-SerialCover()
+if __name__ == "__main__":
+    SerialCover().print()
+    BeamSearch(2)
