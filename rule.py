@@ -2,7 +2,7 @@
 
 # import
 from data import FEATURE, WATERMELON, LABEL
-
+import copy
 # 15.1
 
 
@@ -124,7 +124,7 @@ class RuleSet:
     def __init__(self, rules=[]):
         self.rules = rules
 
-    def addRule(self, rule):
+    def appendRule(self, rule):
         self.rules.append(rule)
 
     def extendRule(self, rules):
@@ -193,7 +193,7 @@ class Data:
 
     # 返回规则包不包括该特征的一个状态，例如[False, True, False,...]
     def getCoveredFeature(self, rule):
-        coveredFeature = [False] * len(self.getFeatureNum())
+        coveredFeature = [False] * self.getFeatureNum()
         ruleAttr = []
         for i in range(len(rule)):
             ruleAttr.append(rule[i].attr)
@@ -212,7 +212,7 @@ class Data:
                 continue
             covered = True
             # 逐个检查样例中的“属性、属性值”是不是被规则中的“属性=属性值”覆盖
-            for j in range(0, len(rule)):
+            for j in range(len(rule)):
                 literal = rule[j]
                 covered = self.getLiteralCover(rule[j], i)
                 if covered == False:
@@ -246,9 +246,12 @@ class Data:
                 TP += 1
             else:
                 FP += 1
-        precision = TP / (TP + FP)
+        if TP + FP == 0:
+            precision = 0
+        else:
+            precision = TP / (TP + FP)
         # recall = TP/data.getPositiveSampleNum()
-        return precision
+        return TP+FP, precision
 
 
 def SerialCover():
@@ -298,10 +301,11 @@ def SerialCover():
                 #     allPositive = allPositive and data.getLabel(dataIndex)
                 # 对规则集进行更新
                 if allPositive == True and coverSet_tmp != []:
-                    R.addRule(rule)
+                    R.appendRule(rule)
                     print(rule)
                     coverSet.extend(coverSet_tmp)
                     print("coverSet", coverSet)
+                    # 当coverSet当中的正例数已经达到数据集的正例数，就结束
                     if len(coverSet) == data.getPositiveSampleNum():
                         completed = True
                         break
@@ -342,34 +346,76 @@ def SerialCover():
 def BeamSearch(b):
     # b是每轮保留的数量，当然不能太大
     coverSet = []
-    R = RuleSet()
-    rule = Rule(Head("好瓜"))
-    # 数据直接就是整个西瓜数据集2.0
-    data = Data(FEATURE, WATERMELON, LABEL)
-    return TopDown(data, coverSet, b, rule)
+    R = RuleSet([])
+    rules = [Rule(Head("好瓜"))]
+    # 数据还是西瓜数据集2.0的训练集
+    trainData = [0, 1, 2, 5, 6, 9, 13, 14, 15, 16]
+    train_watermelon, train_label = [], []
+    for i in trainData:
+        train_watermelon.append(WATERMELON[i])
+        train_label.append(LABEL[i])
+    data = Data(FEATURE, train_watermelon, train_label)
+    TopDown(data, R, coverSet, b, rules)
+    return R
 
 
-def TopDown(data, coverSet, b, rule):
-    # 可以写成递归的形式，当coverSet覆盖了所有正例的时候终止，然后返回规则集
-    # 每次传到下一层的时候是把当前留下来的规则传到下面去
+def TopDown(data, R, coverSet, b, rules):
+    # 可以写成递归的形式，当coverSet覆盖了所有正例的时候终止
+    # 每次传到下一层的时候是把当前留下来的b个规则传到下面去
     # 同样的，对于自顶向下的问题，因为是一轮一轮进行扫描，而每轮只添加一个新的
     # 首先是获取二维文字集，那么这个时候在每一层当中要考虑把已经覆盖的那些正例去除掉，再生成FD
     featureDict = data.getFeatureDict(coverSet)
-    gradeTable = []  # 得分表，用来存放拓展出来的规则还有相应的得分
-    # 对于传进来的规则，我们要先看它覆盖了多少个特征，然后把这些特征的属性值去掉
-    coveredFeature = data.getCoveredFeature(rule)
-    featureList = []  # 同时变成一个列表
-    for i in range(len(featureDict)):
-        if coveredFeature[i] == False:
-            featureList.extend(featureDict[i])
-    # 对featureList里面的每一个文字都加到规则中，然后记录结果
-    for i in range(len(featureList)):
-        ruletmp = rule.addLiteral(featureList[i])
-        # 测试
+    gradeTable = []  # 得分表，用来存放拓展出来的规则还有相应的得分、覆盖数、属性次序
+    # 对于传进来的每个规则，都要进行文字的添加
+    for rule in rules:
+        # 我们要先看它覆盖了多少个特征，然后把这些特征的属性值去掉
+        coveredFeature = data.getCoveredFeature(rule)
+        featureList = []  # 同时把没有覆盖的特征对应的文字变成一个列表
+        for i in range(len(featureDict)):
+            if coveredFeature[i] == False:
+                featureList.extend(featureDict[i])
+        # print(*featureList)
+        # print(rule)
+        # 对featureList里面的每一个文字都加到规则中，然后记录结果
+        for i in range(len(featureList)):
+            # 这里要使用深拷贝，每次产生一个新规则
+            ruletmp = copy.deepcopy(rule)
+            ruletmp.addLiteral(featureList[i])
+            # print(ruletmp)
+            # 测试
+            coverNum, precision = data.test(ruletmp, coverSet)
+            gradeTable.append((ruletmp, precision, coverNum, data.getFeatureNum()-data.getFeatureIndex(featureList[i].attr)))
+    # 输出gradeTable看看
+    # for i in gradeTable:
+    #     print(*i)
+    # 对gradeTable进行排序, 优先是precision，然后是coverNum，最后是属性次序靠前
+    from operator import itemgetter
+    gradeTable = sorted(gradeTable, key=itemgetter(1, 2, 3), reverse=True)
+    # 输出gradeTable看看
+    # for i in gradeTable:
+    #     print(*i)
+    # 如果出现了覆盖率为100%的规则，那么将该规则加入到R当中, 把当前规则覆盖的样例序号加入到coverSet中
+    best = gradeTable[0]
+    if best[1] == 1:
+        R.appendRule(best[0])
+        print(best[0])
+        coverSet.extend(data.getCoveredSample(best[0], coverSet))
+        print(coverSet)
+        return # 把一个规则添加到规则集中，那么前面这些东西就要重新算了
+    # 对最前面的b个进行进一步的递归
+    newrules = []
+    for i in range(b):
+        newrules.append(gradeTable[i][0])
+    TopDown(data, R, coverSet, b, newrules)
+    # 递归结束后看看是否已经完成了，还没完成的话还要从头开始
+    if len(coverSet) != data.getPositiveSampleNum():
+        TopDown(data, R, coverSet, b, [Rule(Head("好瓜"))])
 
-        pass
 
 
 if __name__ == "__main__":
     SerialCover().print()
-    BeamSearch(2)
+    print()
+    BeamSearch(1).print()
+    print()
+    BeamSearch(2).print()
