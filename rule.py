@@ -384,7 +384,8 @@ def TopDown(data, R, coverSet, b, rules):
             # print(ruletmp)
             # 测试
             coverNum, precision = data.test(ruletmp, coverSet)
-            gradeTable.append((ruletmp, precision, coverNum, data.getFeatureNum()-data.getFeatureIndex(featureList[i].attr)))
+            gradeTable.append((ruletmp, precision, coverNum, data.getFeatureNum(
+            )-data.getFeatureIndex(featureList[i].attr)))
     # 输出gradeTable看看
     # for i in gradeTable:
     #     print(*i)
@@ -401,7 +402,7 @@ def TopDown(data, R, coverSet, b, rules):
         print(best[0])
         coverSet.extend(data.getCoveredSample(best[0], coverSet))
         print(coverSet)
-        return # 把一个规则添加到规则集中，那么前面这些东西就要重新算了
+        return  # 把一个规则添加到规则集中，那么前面这些东西就要重新算了
     # 对最前面的b个进行进一步的递归
     newrules = []
     for i in range(b):
@@ -410,7 +411,6 @@ def TopDown(data, R, coverSet, b, rules):
     # 递归结束后看看是否已经完成了，还没完成的话还要从头开始
     if len(coverSet) != data.getPositiveSampleNum():
         TopDown(data, R, coverSet, b, [Rule(Head("好瓜"))])
-
 
 
 if __name__ == "__main__":
