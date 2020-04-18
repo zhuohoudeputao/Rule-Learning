@@ -1,268 +1,12 @@
-# Rule Learning
-
 # import
 from data import FEATURE, WATERMELON, LABEL
 import copy
-# 15.1
-
-
-class Literal:
-    # The class of literal
-    # one literal means a test expression for attrs
-    def __init__(self):
-        pass
-
-
-class AtomicFormula(Literal):
-    # The class of atomic formula
-    # one atomic formula means a relation
-    f = None
-    argNum = 0
-    measure = ["forall"]  # or "exists"
-
-    def __init__(self, f=None, argNum=0):
-        super().__init__()
-        self.f = f
-        self.argNum = argNum
-
-    def judge(self, *value):
-        return f(*value)
-
-
-class AtomicProp(Literal):
-    # one atomic proposition means attr = value
-    # 这里也是简化的表示，对于西瓜数据集来说
-    # 原子命题的表示就只有“属性=属性值”，例如“根蒂=蜷缩”
-    attr = ""
-    value = ""
-
-    def __init__(self, attr="", value=""):
-        super().__init__()
-        self.attr = attr
-        self.value = value
-
-    def __str__(self):
-        return "%s=%s" % (self.attr, self.value)
-
-    def __eq__(self, other):
-        return self.attr == other.attr and self.value == other.value
-
-    def judge(self, value, attr):
-        if self.attr == attr and self.value == value:
-            return True
-        else:
-            return False
-
-
-class Head:
-    # The class of head
-    # one head means the result of a rule
-    # 实际上Head的作用就是指示了规则所要判断的结果
-    # 对于西瓜数据集来说，就是“好瓜”或“不是好瓜”，只有两种状态
-    # 但对多分类问题来说，这个state就不能只是True和False了
-    head = ""
-    state = True
-
-    def __init__(self, head="", state=True):
-        self.head = head
-        self.state = state
-
-    def __str__(self):
-        if self.state:
-            return self.head
-        else:
-            return "not%s" % (self.head)
-
-    def setState(self, state):
-        self.state = state
-
-    def switchState(self):
-        self.state = not self.state
-
-
-class Rule:
-    # The class of rule
-    # one rule contains
-    # 1. the result, which is an object of Head
-    # 2. a literal sequence with "and" relation between them
-    # 这里为了简单，规则中文字之间只有合取
-    def __init__(self, head, literalSequence=[]):
-        self.head = head
-        self.rule = literalSequence
-
-    def addLiteral(self, literal):
-        self.rule.append(literal)
-
-    def extendLiteral(self, literalSequence):
-        self.rule.extend(literalSequence)
-
-    # 这里的pos还是从0算起，所以假设要替换第2个，应该传入1
-    def replaceLiteral(self, literal, pos):
-        self.rule[pos] = literal
-
-    def __str__(self):
-        string = ""
-        string = string + self.head.__str__() + " <-- "
-        length = len(self.rule)
-        i = 0
-        while i < length - 1:
-            string = string + self.rule[i].__str__() + " and "
-            i += 1
-        if i < length:
-            string = string + self.rule[i].__str__()
-        return string
-
-    def __len__(self):
-        return len(self.rule)
-
-    def __getitem__(self, item):
-        return self.rule[item]
-
-
-class RuleSet:
-
-    def __init__(self, rules=[]):
-        self.rules = rules
-
-    def appendRule(self, rule):
-        self.rules.append(rule)
-
-    def extendRule(self, rules):
-        self.rules.extend(rules)
-
-    def __len__(self):
-        return len(self.rules)
-
-    def __getitem__(self, item):
-        return self.rules[item]
-
-    def print(self):
-        for i in range(len(self.rules)):
-            print(self.rules[i])
-
+from classes import *
+from operator import itemgetter
 # 15.2
 
 
-class Data:
-    # 管理数据的一个类，为数据提供了一些便利的访问
-    def __init__(self, feature, data, label):
-        self.feature = feature
-        self.data = data
-        self.label = label
-
-    def getSampleNum(self):
-        return len(self.data)
-
-    def getFeatureNum(self):
-        return len(self.feature)
-
-    def getFeatureIndex(self, feature):
-        return self.feature.index(feature)
-
-    def getLiteral(self, dataIndex, featureIndex):
-        return AtomicProp(self.feature[featureIndex], self.data[dataIndex][featureIndex])
-
-    # 一开始这里面没有加self导致出错的结果，原来是因为全局变量的原因
-    def getLabel(self, dataIndex):
-        if isinstance(dataIndex, list):
-            return [self.label[index] == '是' for index in dataIndex]
-        else:
-            return self.label[dataIndex] == '是'
-
-    def getPositiveSampleNum(self):
-        ps = 0
-        for i in range(len(self.label)):
-            if self.label[i] == '是':
-                ps += 1
-        return ps
-
-    # 不重复地生成文字
-    def getFeatureDict(self, skip=[]):
-        dataIndex = 0
-        featureIndex = 0
-        sampleNum = self.getSampleNum()
-        atomicPropContainer = [[] for i in range(len(self.feature))]
-        for dataIndex in range(self.getSampleNum()):
-            if dataIndex in skip:
-                continue
-            for featureIndex in range(self.getFeatureNum()):
-                literalNow = self.getLiteral(dataIndex, featureIndex)
-                if literalNow not in atomicPropContainer[featureIndex]:
-                    atomicPropContainer[featureIndex].append(literalNow)
-        return atomicPropContainer
-
-    # 返回规则包不包括该特征的一个状态，例如[False, True, False,...]
-    def getCoveredFeature(self, rule):
-        coveredFeature = [False] * self.getFeatureNum()
-        ruleAttr = []
-        for i in range(len(rule)):
-            ruleAttr.append(rule[i].attr)
-        for i in range(self.getFeatureNum()):
-            if self.feature[i] in ruleAttr:
-                coveredFeature[i] = True
-        return coveredFeature
-
-    # skip可以用来传入已经去除掉的样例序号，相当于在数据集中去掉该样例
-    def getCoveredSample(self, rule, skip=[]):
-        # get the indexes of data covered by rule
-        indexSet = []
-        # 对每个样例都排查一遍
-        for i in range(len(self.data)):
-            if i in skip:
-                continue
-            covered = True
-            # 逐个检查样例中的“属性、属性值”是不是被规则中的“属性=属性值”覆盖
-            for j in range(len(rule)):
-                literal = rule[j]
-                covered = self.getLiteralCover(rule[j], i)
-                if covered == False:
-                    break
-            if covered == True:
-                indexSet.append(i)
-        return indexSet
-
-    def getLiteralCover(self, literal, dataIndex):
-        # judge if the attr of sample is covered by literal or not
-        # 本来是没有文字覆盖样例这种说法的
-        # 但是实际上在判断就是每个文字对一个样例进行判断
-        # 首先查看这个文字的属性有没有在数据里
-        featureIndex = 0
-        while featureIndex < self.getFeatureNum():
-            if self.feature[featureIndex] == literal.attr:
-                break
-            featureIndex += 1
-        if featureIndex == self.getFeatureNum():
-            return False
-        # 然后判断这个样例的属性值是否跟文字的属性值一样
-        else:
-            return self.data[dataIndex][featureIndex] == literal.value
-
-    # 测试函数，这里暂时用到准确率，以后有需要还可以继续加
-    def test(self, rule, skip=[]):
-        covered = self.getCoveredSample(rule, skip)
-        TP, FP, FN, TN = 0, 0, 0, 0
-        for i in covered:
-            if self.getLabel(i) == True:
-                TP += 1
-            else:
-                FP += 1
-        if TP + FP == 0:
-            precision = 0
-        else:
-            precision = TP / (TP + FP)
-        # recall = TP/data.getPositiveSampleNum()
-        return TP+FP, precision
-
-
-def SerialCover():
-    # 一开始用整个数据集怎么都做不出结果
-    # 最后发现是用P80页上半部分（训练集）做的
-    trainData = [0, 1, 2, 5, 6, 9, 13, 14, 15, 16]
-    train_watermelon, train_label = [], []
-    for i in trainData:
-        train_watermelon.append(WATERMELON[i])
-        train_label.append(LABEL[i])
-    data = Data(FEATURE, train_watermelon, train_label)
+def SerialCover(data):
     # 首先第一步是生成文字表（突然想到可以直接写在Data类里）
     # 已二维的形式记录目前所有生成的文字
     featureDict = data.getFeatureDict()
@@ -286,9 +30,9 @@ def SerialCover():
             index = [0]*len(combine)
             while currentCombineCompleted == False and not completed:
                 # 生成规则
-                rule = Rule(Head("好瓜"), [])  # 创建一个新的规则
+                rule = Rule(Head("好瓜", "是"), Complex([]))  # 创建一个新的规则
                 for i in range(len(index)):
-                    rule.addLiteral(featureDict[combine[i]][index[i]])
+                    rule.appendLiteral(featureDict[combine[i]][index[i]])
                 # print(rule)
                 # 测试规则
                 allPositive = True
@@ -306,7 +50,7 @@ def SerialCover():
                     coverSet.extend(coverSet_tmp)
                     print("coverSet", coverSet)
                     # 当coverSet当中的正例数已经达到数据集的正例数，就结束
-                    if len(coverSet) == data.getPositiveSampleNum():
+                    if len(coverSet) == data.getSampleNum(label="是"):
                         completed = True
                         break
                 else:
@@ -343,19 +87,21 @@ def SerialCover():
     return R
 
 
-def BeamSearch(b):
+def BeamSearch(data, b):
     # b是每轮保留的数量，当然不能太大
     coverSet = []
     R = RuleSet([])
-    rules = [Rule(Head("好瓜"))]
-    # 数据还是西瓜数据集2.0的训练集
-    trainData = [0, 1, 2, 5, 6, 9, 13, 14, 15, 16]
-    train_watermelon, train_label = [], []
-    for i in trainData:
-        train_watermelon.append(WATERMELON[i])
-        train_label.append(LABEL[i])
-    data = Data(FEATURE, train_watermelon, train_label)
-    TopDown(data, R, coverSet, b, rules)
+    # rules = [Rule(Head("好瓜", "是"), Complex([]))]
+    # # 数据还是西瓜数据集2.0的训练集
+    # trainData = [0, 1, 2, 5, 6, 9, 13, 14, 15, 16]
+    # train_watermelon, train_label = [], []
+    # for i in trainData:
+    #     train_watermelon.append(WATERMELON[i])
+    #     train_label.append(LABEL[i])
+    # data = Data(FEATURE, train_watermelon, train_label)
+    # 递归结束后看看是否已经完成了，还没完成的话还要从头开始
+    while len(coverSet) != data.getSampleNum(label="是"):
+        TopDown(data, R, coverSet, b, [Rule(Head("好瓜", "是"), Complex([]))])
     return R
 
 
@@ -380,22 +126,21 @@ def TopDown(data, R, coverSet, b, rules):
         for i in range(len(featureList)):
             # 这里要使用深拷贝，每次产生一个新规则
             ruletmp = copy.deepcopy(rule)
-            ruletmp.addLiteral(featureList[i])
+            ruletmp.appendLiteral(featureList[i])
             # print(ruletmp)
             # 测试
-            coverNum, precision = data.test(ruletmp, coverSet)
+            coverNum, precision = data.testRule(ruletmp, coverSet)
             gradeTable.append((ruletmp, precision, coverNum, data.getFeatureNum(
             )-data.getFeatureIndex(featureList[i].attr)))
     # 输出gradeTable看看
     # for i in gradeTable:
     #     print(*i)
     # 对gradeTable进行排序, 优先是precision，然后是coverNum，最后是属性次序靠前
-    from operator import itemgetter
     gradeTable = sorted(gradeTable, key=itemgetter(1, 2, 3), reverse=True)
     # 输出gradeTable看看
     # for i in gradeTable:
     #     print(*i)
-    # 如果出现了覆盖率为100%的规则，那么将该规则加入到R当中, 把当前规则覆盖的样例序号加入到coverSet中
+    # 如果出现了准确率为100%的规则，那么将该规则加入到R当中, 把当前规则覆盖的样例序号加入到coverSet中
     best = gradeTable[0]
     if best[1] == 1:
         R.appendRule(best[0])
@@ -408,14 +153,94 @@ def TopDown(data, R, coverSet, b, rules):
     for i in range(b):
         newrules.append(gradeTable[i][0])
     TopDown(data, R, coverSet, b, newrules)
-    # 递归结束后看看是否已经完成了，还没完成的话还要从头开始
-    if len(coverSet) != data.getPositiveSampleNum():
-        TopDown(data, R, coverSet, b, [Rule(Head("好瓜"))])
+
+
+def CN2(data, b, LRS_threshold=0.99):
+    # 跟集束搜素一样需要一个参数b
+    # 还需要另外的一个参数，就是LRS增长到什么时候停止生长
+    coverSet = []
+    R = RuleSet([])
+    # 要注意CN2不是从“好瓜”这个头开始的，也就是说它的头可以是坏瓜
+    # 对一个complex衡量的标准是熵的大小，熵越小，这个complex越好
+    # cpxes = [Complex([])]
+    CN2_TopDown(data, R, coverSet, b, [Complex([])], LRS_threshold)
+    return R
+
+
+def CN2_TopDown(data, R, coverSet, b, cpxes, LRS_threshold):
+    featureDict = data.getFeatureDict(coverSet)
+    gradeTable = []
+
+    for cpx in cpxes:
+        # 我们要先看它覆盖了多少个特征，然后把这些特征的属性值去掉
+        coveredFeature = data.getCoveredFeature(cpx)
+        featureList = []  # 同时把没有覆盖的特征对应的文字变成一个列表
+        for i in range(len(featureDict)):
+            if coveredFeature[i] == False:
+                featureList.extend(featureDict[i])
+        # 对featureList里面的每一个文字都加到规则中(特化)，然后记录结果
+        for i in range(len(featureList)):
+            # 这里要使用深拷贝，每次产生一个新complex
+            cpxtmp = copy.deepcopy(cpx)
+            cpxtmp.appendLiteral(featureList[i])
+            # 测试(这里发生了不同，是去求熵和LRS)
+            entropy, LRS = data.testComplex(cpxtmp, coverSet)
+            # 因为熵是越小越好，LRS是越大越好
+            gradeTable.append((cpxtmp, entropy, LRS))
+
+    # 对gradeTable关于LRS进行排序（因为一旦有LRS>0.99, 就要生成一个规则）
+    gradeTable = sorted(gradeTable, key=itemgetter(2), reverse=True)
+    # 找到那些大于LRS阈值的complex
+    maxlength = -1
+    for i in range(len(gradeTable)):
+        if gradeTable[i][2] >= LRS_threshold:
+            maxlength += 1
+    if maxlength != -1:
+        # 如果出现了LRS大于阈值的complex，就找出熵最小的那个，然后生成一个规则
+        satisfied = sorted(
+            gradeTable[0: maxlength + 1], key=itemgetter(1))
+        best = satisfied[0]
+        # print(*best)
+        head = Head("好瓜", data.getMostLabel(best[0], coverSet))
+        rule = Rule(head, best[0])
+        R.appendRule(rule)
+        print(rule)
+        coverSet.extend(data.getCoveredSample(rule, coverSet))
+        print(coverSet)
+        # 然后在这个基础上重新计算新的规则
+        CN2_TopDown(data, R, coverSet, b, [Complex([])], LRS_threshold)
+    else:
+        # 否则对前面b个进行递归，此时需要取熵最小的b个
+        # 但递归前还需要进行一些判断
+        # complex已经是最长了，就是说再怎么加文字，它的LRS都没办法提高了，这时要考虑放大b或者降低LRS的阈值
+        if len(gradeTable[0][0]) == data.getFeatureNum():
+            return
+        gradeTable = sorted(gradeTable, key=itemgetter(1))
+        newcpxes = []
+        for i in range(b):
+            newcpxes.append(gradeTable[i][0])
+        CN2_TopDown(data, R, coverSet, b, newcpxes, LRS_threshold)
 
 
 if __name__ == "__main__":
-    SerialCover().print()
+    # 一开始用整个数据集怎么都做不出结果
+    # 最后发现是用P80页上半部分（训练集）做的
+    trainData = [0, 1, 2, 5, 6, 9, 13, 14, 15, 16]
+    train_watermelon, train_label = [], []
+    for i in trainData:
+        train_watermelon.append(WATERMELON[i])
+        train_label.append(LABEL[i])
+    data = Data(FEATURE, train_watermelon, train_label)
+
+    # SerialCover(data).print()
+    # print()
+    # BeamSearch(data, 1).print()
+    # print()
+    # BeamSearch(data, 2).print()
+    # print()
+    # 发现b参数的影响在这个数据下并不大，反而是LRS阈值的影响比较大
+    # 也就是说如果已经找不到能达到LRS阈值的规则了，那么扩大
+    CN2(data, 5).print()
     print()
-    BeamSearch(1).print()
-    print()
-    BeamSearch(2).print()
+    # 更改了LRS的阈值，发现最后训练集是有一个没有被覆盖的，可能这时需要加入一个默认规则
+    CN2(data, 1, LRS_threshold=0.9).print()
