@@ -2,22 +2,23 @@
 
 \usepackage{ctex}
 \usepackage{amsmath}
+\usepackage{showlabels}
 % 代码块， lstlisting
 \usepackage{listings}
 \lstset{
     language=python,
 }
 
-\title{di规则学习 Rule Learning}
+\title{第15章 规则学习 Rule Learning}
 \author{}
 \date{\today}
 
 \begin{document}
 \maketitle
 % \setcounter{section}{1}
-\section{15.1 基本概念 Basic Concepts}
+\section{基本概念 Basic Concepts}
 \subsection{规则 If-then}
-    \begin{equation}
+    \begin{equation}\label{basic_form}
         \oplus \leftarrow f_1 \wedge f_2 \wedge \dots \wedge f_L
     \end{equation}
     其中, $\oplus$称为规则头(head), $f_i$称为文字(literal)或选择子(selector),
@@ -35,7 +36,7 @@
     前面这种只考虑属性值的覆盖，我们称之为complex的覆盖，
     之后在算法里会用到，而且大多数情况下用的是这种覆盖。
     
-    规则1：好瓜 $\leftarrow$ 根蒂=蜷缩 $\wedge$ 脐部=凹陷
+    规则1：好瓜 $\leftarrow$ 根蒂=蜷缩 $\wedge$ 脐部=凹陷 \label{atomic_prop_rule}
     
     规则2：坏瓜 $\leftarrow$ 纹理=模糊
 
@@ -64,7 +65,7 @@
     
     3. 命题规则是一阶规则的特殊形式，一阶规则表达能力比命题规则要强
 
-\section{15.2 序贯覆盖（以命题规则学习为例）}
+\section{序贯覆盖（以命题规则学习为例）}
 \subsection{基本思想}
     逐条归纳，通过每次训练生成一条仅覆盖正例的规则，就去除掉那些覆盖的样例，用剩下的继续训练
 \subsection{以西瓜数据集2.0的训练集为例的序贯覆盖}  
@@ -89,8 +90,8 @@
 \subsection{以西瓜数据集2.0的训练集为例的自顶向下}
     详见TopDown函数的输出
 
-\section{15.3 剪枝优化}
-\subsubsection{基本思想}
+\section{剪枝优化}
+\subsection{基本思想}
     通过剪枝前后发生的性能变化来判断是否进行剪枝，可以缓解过拟合的风险
     
     规则生成本质上是一个贪心搜索过程，
@@ -102,9 +103,9 @@
     于是通过剪枝来提高规则集的泛化性能。
 
     预剪枝是指生长过程中剪枝，后剪枝是指规则产生后剪枝。
-\subsubsection{CN2算法}
+\subsection{CN2算法}
     在预剪枝时，假设用规则集预测必须显著优于直接用训练集的后验概率分布（也就是训练集正反例数量的比率）进行猜测。使用了似然率统计量LRS来表示两种预测方法之间的差别。
-    \begin{equation}
+    \begin{equation}\label{LRS}
         LRS = 2(\hat{m}_+ \log_2{\frac{(\frac{\hat{m}_+}{\hat{m}_+ + \hat{m}_-})}{(\frac{m_+}{m_+ + m_-})}} + 
         \hat{m}_- \log_2{\frac{(\frac{\hat{m}_-}{\hat{m}_+ + \hat{m}_-})}{(\frac{m_-}{m_+ + m_-})}})
     \end{equation}
@@ -124,7 +125,7 @@
     如果大家都差不多大的话，那么熵就比较大，这个在决策树里面讲过了我这里就不再赘述。
     
     而LRS作为CN2算法的终止条件，论文也似乎和课本当中说的不太一样。论文中的LRS是这样定义的：
-    \begin{equation}
+    \begin{equation}\label{LRS_in_CN2}
         LRS = 2\sum_i f_i log_2(\dfrac{f_i}{e_i})
     \end{equation}
     其中$f_i$是指某一类样例在结果中的频率, $e_i$是指某一类样例在整个训练集中的比例。
@@ -133,7 +134,7 @@
 
     CN2算法的具体过程和TopDown方法类似，详见代码和论文。
 
-\subsubsection{REP,IREP与IREP*}
+\subsection{REP,IREP与IREP*}
     减错剪枝REP是后剪枝常用的策略，其基本做法是：
     将样例集划分为训练集T和验证集V，
     从T上学得规则集R后进行多轮剪枝，每一轮穷举可能的剪枝操作，
@@ -155,7 +156,7 @@
     作为性能度量指标，在剪枝时删除规则尾部的多个文字，
     并在最终得到规则集之后再进行一次IREP剪枝。
 
-\subsubsection{RIPPER算法}
+\subsection{RIPPER算法}
     RIPPER算法是将剪枝机制和后处理优化相结合的规则生成算法，其泛化性能也更好。
     首先是用IREP*算法在训练集D上生成规则集$R$，
     然后PostOpt(R),也就是遍历R中的每一条规则$r$，
@@ -168,6 +169,64 @@
     恰恰是通过全局考虑缓解了之前贪心算法的局部性，
     也就是之前那种每条规则生成之后都没有对后面产生的规则加以考虑。
 
-\section{15.4 一阶规则学习}
+\section{一阶规则学习}
+\subsection{关系数据和一阶规则}
+    现实问题一般涉及处理对象之间的关系，而无法一下子看出处理对象的定量属性。例如，
+    我们可能难以看出瓜X的色泽是青绿还是乌黑，但可以一眼看出瓜X比瓜Y色泽更深，根蒂更蜷，因此瓜X更好。
+    特别是当这些属性值是连续值而却没有一个界定范围的时候。
+
+    我们可以定义：色泽深度：乌黑>青绿>浅白，从而得到(在训练集中)：
+    色泽更深(2, 1), 色泽更深(2, 6)等等，这称之为背景知识(background knowledge)；
+    在Label中，我们可以定义：瓜好的程度：是>否，从而得到：
+    更好(1, 10), 更好(1, 14)等等，这称为关系数据样例(example)。
+    总之，这些数据称为关系数据(relational data)。
+
+    从西瓜数据集5.0可以学出以下的规则：
+    \begin{equation}
+        (\forall X, \forall Y)(\text{更好}(X, Y)\leftarrow \text{根蒂更蜷}(X, Y)\wedge \text{脐部更凹}(X, Y))
+    \end{equation}
+    可以看到，仍然是(\ref{basic_form})的形式。但和之前的\ref{atomic_prop_rule}不同的地方就在于
+    规则头和文字换成了一阶逻辑表达式。通过谓词表达对象之间的关系，通过量词表示使用对象的范围。通常，
+    一阶规则中的所有出现的变量都是被全称量词$\forall$限定的，因此下面省略量词部分。
+    
+    一阶规则有强大的表达能力，能够容易地引入领域知识，这是它相对于命题规则学习的另一大优势。
+\subsection{FOIL算法}
+    FOIL(First-Order Inductive Learner) 是著名的一阶规则学习算法，遵循序贯覆盖框架（也就是每次
+    排除掉覆盖的正例，从剩下的数据中继续生成，本质是贪心搜索），以及采用自顶向下（由一般到特殊）的
+    规则归纳策略。由于逻辑变量的存在，在生成规则时需要考虑不同的变量组合。
+    
+    例如在西瓜数据集5.0上，首先是从一个空规则开始
+    \begin{equation}\label{empty_first_order_rule}
+        \text{更好}(X, Y) \leftarrow .
+    \end{equation}
+    然后考虑数据中的其他谓词和各种变量搭配作为候选文字，注意此时的变量当中应该至少包括一个出现的变量，否则就没有意义了。
+    例如：色泽更深(X, Y), 色泽更深(X, Z), 根蒂更蜷(X, Y)等等。
+    下面我们来看看FOIL算法是如何选出文字的：
+
+    \begin{equation}\label{F_Gain}
+        F\_Gain = \hat{m}_+ \times (\log_2{\frac{\hat{m}_+}{\hat{m}_+ + \hat{m}_-}} - \log_2{\frac{m_+}{m_+ + m_-}})
+    \end{equation}
+    可以看到，它主要是考虑了正例的信息量，并且用正例数作为权重。这是因为关系数据中正例数往往远少于反例数?
+    通过计算可以得到，加入“色泽更深(X, Y)”这个新规则可以覆盖16个正例，2个反例，其FOIL增益为
+    \begin{equation}
+        F\_Gain(\text{更好}(X,Y)\leftarrow \text{色泽更深}(X,Y))=16\times(\log_2{\frac{16}{18}-\log_2{\frac{25}{50}}})=13.28
+    \end{equation}
+    接下来，再不断增加规则长度，直到生成只覆盖正例的规则。把规则加入规则集，去除掉覆盖的正例，再进行上面的步骤，直到所有正例都被覆盖。
+    此后，使用后剪枝对规则集进行优化。
+\section{归纳逻辑程序设计ILP}
+    归纳逻辑程序设计(Inductive Logic Programming, ILP)主要是在一阶规则的学习中引入了函数和逻辑表达式嵌套。
+    一方面使表达能力提升，另一方面可看作用机器学习技术来解决基于背景知识的逻辑程序归纳，
+    其规则可被PROLOG等逻辑程序设计语言直接使用。
+
+    但加入函数和逻辑表达式嵌套也带来了计算上的巨大挑战。例如给定一元谓词P和一元函数f，它们能组成的文字有
+    P(X),P(f(X)),P(f(f(X)))等无穷多个，若采用自顶向下的规则生成过程，则在增加规则长度的时候因为无法列举所有的候选文字
+    而失败。此外例如计算FOIL增益需要对规则覆盖进行计数，也会产生困难？
+
+\subsection{最小一般泛化}
+    ILP采用自底向上的规则生成策略，从具体事实出发，逐步泛化以增加对样例的覆盖率。
+    泛化
+
+\subsection{逆归结}
+
 
 \end{document}
